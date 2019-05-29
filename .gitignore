@@ -1,0 +1,19 @@
+# Settings
+params
+
+# Generated files
+preupdater.sh
+
+# Migration files
+supervisormigration/balena-supervisor
+supervisordelta/app.js
+supervisordelta/app.js.signature
+
+# Exported files
+deltas/*.tar
+
+# Task batches
+batch*
+
+# Logs
+*.log
