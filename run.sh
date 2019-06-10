@@ -9,7 +9,7 @@ source params
 
 if [ -n "${TARGET_COMMIT}" ]; then
   # shellcheck disable=SC2002
-  cat batch | stdbuf -oL xargs -I{} -P 15 /bin/sh -c "balena device {} | grep -q 'COMMIT:.*${TARGET_COMMIT}' && (cat updater.sh | balena ssh {} -s --noninteractive | sed 's/^/{} : /' | tee --append updater.log)"
+  cat batch | stdbuf -oL xargs -I{} -P 15 /bin/sh -c "balena device {} | grep -q 'COMMIT:.*${TARGET_COMMIT}' && (cat updater.sh | balena ssh {} -s --noninteractive | sed 's/^/{} : /' | tee -a updater.log)"
 else
   echo "TARGET_COMMIT is not set."
   exit 2

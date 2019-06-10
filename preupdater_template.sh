@@ -59,7 +59,7 @@ main() {
         # Modify the supervisor start script so it doesn't recreate the supervisor container on restart
         tempfile=$(mktemp -u /tmp/tmp.supervisor.XXXXXXXXX)
         cp "${superstartscript}" "${tempfile}"
-    
+
         # shellcheck disable=SC2016
         sed -i 's/^(\[ "$SUPERVISOR_IMAGE_ID".*//' "${tempfile}"
         cat << EOF >> "${tempfile}"
@@ -74,6 +74,18 @@ EOF
     else
         echo "Supervisor script is already modified."
     fi
+
+    echo "Restarting supervisor to make sure changes to the start script are picked up"
+    systemctl restart resin-supervisor || finish_up "Supervisor restart didn't work."
+    i=0
+    while [ -z "$(docker ps | grep resin_supervisor)" ] && [ $i -lt 60 ]; do
+      sleep 1
+      i=$[$i+1]
+    done
+    if [ -z "$(docker ps | grep resin_supervisor)" ]; then
+      finish_up "Supervisor container didn't come up before timeout"
+    fi
+
 
     echo "Modifying supervisor container"
     docker exec resin_supervisor sed -i 's/waitAsync()\.timeout(5e3)/waitAsync()\.timeout(5e5)/' /usr/src/app/dist/app.js || finish_up "Supervisor container hotfix didn't work."
