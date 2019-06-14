@@ -5,9 +5,12 @@ set -o errexit -o pipefail
 # Don't run anything before this source as it sets PATH here
 # shellcheck disable=SC1091
 source /etc/profile
-# Load
+# Load device settings from config.json
 # shellcheck disable=SC1091
 source /usr/sbin/resin-vars
+# Load SUPERVISOR variables
+# shellcheck disable=SC1091
+source /etc//resin-supervisor/supervisor.conf
 
 setup_logfile() {
     local workdir=$1
@@ -34,7 +37,6 @@ finish_up() {
     exit ${exit_code}
 }
 
-
 device_repin() {
     COMMIT_HASH=$1
     if [ -z "${COMMIT_HASH}" ]; then
@@ -45,6 +47,77 @@ device_repin() {
     curl --fail --retry 10 -s -X PATCH "${API_ENDPOINT}/v2/device(${DEVICE_ID})" -H "Authorization: Bearer ${DEVICE_API_KEY}" -H "Content-Type: application/json" --data-binary '{"build":'"${BUILD_ID}"'}' || finish_up "Couldn't set new commit hash."
 }
 
+#######################################
+# Globals:
+#   CONFIG_PATH
+# Arguments:
+#   var_name: the name of the required entry in config.json
+# Returns:
+#   var_value: the value of the entry
+#######################################
+resin_var_manual_load() {
+    local var_name=$1
+    local var_value
+
+    if [ -f "${CONFIG_PATH}" ]; then
+        var_value=$(jq -r ".${var_name}" "${CONFIG_PATH}") || finish_up "Couldn't get device API key."
+        if [ ! -n "${var_value}" ]; then
+            finish_up "Couldn't load device API key manually."
+        fi
+    else
+        finish_up "Couldn't find the config.json file."
+    fi
+    echo "${var_value}"
+}
+
+#######################################
+# Create or update service environment variable values
+# Globals:
+#   API_ENDPOINT
+#   DEVICE_API_KEY
+#   DEVICE_ID
+#   UUID
+# Arguments:
+#   env_name: the env var name
+#   env_value: the env var value
+# Returns:
+#   None
+#######################################
+service_env_create_update() {
+    local env_name=$1
+    local env_value=$2
+    local ENVID
+
+    ENVID=$(curl --fail --retry 10 -s -X GET \
+        "${API_ENDPOINT}/v4/device_service_environment_variable?\$filter=(service_install/device%20eq%20${DEVICE_ID}%20and%20name%20eq%20'${env_name}')" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${DEVICE_API_KEY}"  | jq .d[0].id) || finish_up "Couldn't get environment variable information correctly."
+
+    if [ "${ENVID}" = "null" ]; then
+        echo "Service env var doesn't exists, creating."
+        SERVICEID=$(curl --fail --retry 10 -s -X GET "${API_ENDPOINT}/v4/service_install?\$filter=device/uuid%20eq%20'${UUID}'&\$expand=installs__service(\$select=service_name)" -H "Content-Type: application/json" -H "Authorization: Bearer ${DEVICE_API_KEY}" | jq -r .d[0].id)
+
+        curl --fail --retry 10 -s -X POST \
+        "${API_ENDPOINT}/v4/device_service_environment_variable" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${DEVICE_API_KEY}" \
+        --data '{
+            "service_install": "'"${SERVICEID}"'",
+            "name": "'"${env_name}"'",
+            "value": "'"${env_value}"'"
+        }' || finish_up "Couldn't create service env var."
+    else
+        echo "Service env var already exists, updating."
+        curl --fail --retry 10 -s -X PATCH \
+        "${API_ENDPOINT}/v4/device_service_environment_variable(${ENVID})" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${DEVICE_API_KEY}" \
+        --data '{
+            "value": "'"${env_value}"'"
+        }' || finish_up "Couldn't update service env var."
+    fi
+}
+
 
 main() {
     workdir="/mnt/data/ops2"
@@ -52,6 +125,27 @@ main() {
 
     # also sets tail_pid
     setup_logfile "${workdir}"
+
+    # Fill in missing global variables, mostly for 2.0.0-rcX OS versions, that have problem with "resin-var"
+    if [ ! -n "${API_ENDPOINT}" ]; then
+        API_ENDPOINT=$(resin_var_manual_load "apiEndpoint")
+    fi
+    if [ ! -n "${APPLICATION_ID}" ]; then
+        APPLICATION_ID=$(resin_var_manual_load "applicationId")
+    fi
+    if [ ! -n "${DEVICE_API_KEY}" ]; then
+        DEVICE_API_KEY=$(resin_var_manual_load "deviceApiKey")
+    fi
+    if [ ! -n "${DEVICE_ID}" ]; then
+        DEVICE_ID=$(resin_var_manual_load "deviceId")
+    fi
+    if [ ! -n "$UUID" ]; then
+        UUID=$(resin_var_manual_load "uuid")
+    fi
+
+    if [ "$SUPERVISOR_TAG" != "v6.6.11_logstream" ]; then
+        finish_up "Supervisor needs to be updated to v6.6.11_logstream before continuing"
+    fi
 
     local superstartscript="/usr/bin/start-resin-supervisor"
     # shellcheck disable=SC2016
@@ -77,20 +171,23 @@ EOF
 
     echo "Restarting supervisor to make sure changes to the start script are picked up"
     systemctl restart resin-supervisor || finish_up "Supervisor restart didn't work."
-    i=0
-    while [ -z "$(docker ps | grep resin_supervisor)" ] && [ $i -lt 60 ]; do
+    sleep 5 # Let the restart commence
+    local i=0
+    while ! docker ps | grep -q resin_supervisor ; do
       sleep 1
-      i=$[$i+1]
+      i=$((i+1))
+      if [ $i -gt 60 ] ; then
+        finish_up "Supervisor container didn't come up before timeout"
+      fi
     done
-    if [ -z "$(docker ps | grep resin_supervisor)" ]; then
-      finish_up "Supervisor container didn't come up before timeout"
-    fi
-
 
     echo "Modifying supervisor container"
     docker exec resin_supervisor sed -i 's/waitAsync()\.timeout(5e3)/waitAsync()\.timeout(5e5)/' /usr/src/app/dist/app.js || finish_up "Supervisor container hotfix didn't work."
     echo "Restarting supervisor container"
     systemctl restart resin-supervisor || finish_up "Supervisor restart didn't work."
+
+    echo "Updating environment variable"
+    service_env_create_update "DBUS_SYSTEM_BUS_ADDRESS" "unix:path=/run/dbus/system_bus_socket"
 
     device_repin "%%TARGET_COMMIT%%"
 

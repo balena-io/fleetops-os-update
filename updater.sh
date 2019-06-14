@@ -62,7 +62,7 @@ retry_download() {
                 fi
             done
         fi
-        echo "Dowload finished."
+        echo "Download finished."
     else
         finish_up "Curl download without final status."
     fi
