@@ -10,7 +10,7 @@ source /etc/profile
 source /usr/sbin/resin-vars
 # Load SUPERVISOR variables
 # shellcheck disable=SC1091
-source /etc//resin-supervisor/supervisor.conf
+source /etc/resin-supervisor/supervisor.conf
 
 setup_logfile() {
     local workdir=$1
@@ -60,9 +60,9 @@ resin_var_manual_load() {
     local var_value
 
     if [ -f "${CONFIG_PATH}" ]; then
-        var_value=$(jq -r ".${var_name}" "${CONFIG_PATH}") || finish_up "Couldn't get device API key."
-        if [ ! -n "${var_value}" ]; then
-            finish_up "Couldn't load device API key manually."
+        var_value=$(jq -r ".${var_name}" "${CONFIG_PATH}") || finish_up "Couldn't get ${var_name} from config.json."
+        if [ -z "${var_value}" ]; then
+            finish_up "Couldn't load ${var_name} key manually."
         fi
     else
         finish_up "Couldn't find the config.json file."
@@ -127,19 +127,19 @@ main() {
     setup_logfile "${workdir}"
 
     # Fill in missing global variables, mostly for 2.0.0-rcX OS versions, that have problem with "resin-var"
-    if [ ! -n "${API_ENDPOINT}" ]; then
+    if [ -z "${API_ENDPOINT}" ]; then
         API_ENDPOINT=$(resin_var_manual_load "apiEndpoint")
     fi
-    if [ ! -n "${APPLICATION_ID}" ]; then
+    if [ -z "${APPLICATION_ID}" ]; then
         APPLICATION_ID=$(resin_var_manual_load "applicationId")
     fi
-    if [ ! -n "${DEVICE_API_KEY}" ]; then
+    if [ -z "${DEVICE_API_KEY}" ]; then
         DEVICE_API_KEY=$(resin_var_manual_load "deviceApiKey")
     fi
-    if [ ! -n "${DEVICE_ID}" ]; then
+    if [ -z "${DEVICE_ID}" ]; then
         DEVICE_ID=$(resin_var_manual_load "deviceId")
     fi
-    if [ ! -n "$UUID" ]; then
+    if [ -z "$UUID" ]; then
         UUID=$(resin_var_manual_load "uuid")
     fi
 
