@@ -41,7 +41,7 @@ retry_download() {
     local curl_retval
     local http_status
     echo "Downloading: ${url}"
-    http_status=$(curl -C- --fail -w "%{http_code}" -O "${url}") || curl_retval=$?
+    http_status=$(curl -C- --retry 20 --fail -w "%{http_code}" -O "${url}") || curl_retval=$?
     if [ -n "${curl_retval}" ] && [ "${curl_retval}" -ne 22 ]; then
         finish_up "Curl failure while downloading."
     fi
@@ -53,7 +53,7 @@ retry_download() {
                 curl_retval=
                 sleep 5;
                 echo "Retrying download"
-                http_status=$(curl -C- --fail -w "%{http_code}" -O "$url" ) || curl_retval=$?
+                http_status=$(curl -C- --retry 20 --fail -w "%{http_code}" -O "$url" ) || curl_retval=$?
                 if [ -n "${curl_retval}" ] && [ "${curl_retval}" -ne 22 ]; then
                     finish_up "Curl failure while downloading."
                 fi
