@@ -12,7 +12,8 @@ source /etc/resin-supervisor/supervisor.conf
 # shellcheck disable=SC1091
 source /usr/sbin/resin-vars
 
-URLBASE="https://misc1.dev.balena.io/~imrehg/fleetops-od-os"
+# Linking to a specific git commit sha to always be sure what version of the files are pulled
+URLBASE="https://raw.githubusercontent.com/balena-io-playground/fleetops-os-update/ca1996e3b99e07a66220a3291817a0e2aa260d45"
 TARGET_OS_VERSION="2.32.0+rev1"
 TARGET_SUPERVISOR_REPO="balena/armv7hf-supervisor"
 TARGET_SUPERVISOR_VERSION="v9.14.0"
