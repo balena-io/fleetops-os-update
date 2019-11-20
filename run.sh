@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 if [ ! -f "params" ]; then
-  echo "The \"params\" file doest't exists, not running anything."
+  echo "The \"params\" file doesn't exist, not running anything."
   exit 1
 fi
 # shellcheck disable=SC1091
