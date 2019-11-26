@@ -116,6 +116,8 @@ finish_up() {
 }
 
 main() {
+    echo pid $$
+
     if grep -q "${TARGET_OS_VERSION}" /etc/os-release ; then
        echo "OS update already done, nothing else to do."
        finish_up
