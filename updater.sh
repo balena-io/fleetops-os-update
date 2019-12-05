@@ -120,7 +120,7 @@ main() {
 
     if grep -q "${TARGET_OS_VERSION}" /etc/os-release ; then
        echo "OS update already done, nothing else to do."
-       finish_up
+       finish_up "OS update already done, nothing else to do."
     fi
 
     workdir="/mnt/data/ops2"
@@ -188,7 +188,7 @@ main() {
 
     echo "Checking OS update image integrity"
     grep "${TARGET_OS_VERSION_FILENAME}" "checksums.txt" | sha256sum -c -- || finish_up "OS update image integrity check failed"
-    echo "Extracing host OS update image"
+    echo "Extracting host OS update image"
     ./xzdec "${TARGET_OS_VERSION_FILENAME}" > hostos.tar
     echo "Loading host OS update image into docker"
     docker load -i hostos.tar
