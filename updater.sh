@@ -19,6 +19,7 @@ TARGET_SUPERVISOR_REPO="balena/armv7hf-supervisor"
 TARGET_SUPERVISOR_VERSION="v9.14.0"
 TARGET_OS_VERSION_FILENAME=$(echo "balenaos${TARGET_OS_VERSION}-raspberrypi3.tar.xz" | tr + _)
 DOWNLOADS=("xzdec.gz" "rdiff.xz" "hostosupdate.sh" "os/${TARGET_OS_VERSION_FILENAME}" "checksums.txt")
+MAX_RETRIES=20
 
 setup_logfile() {
     local workdir=$1
@@ -42,7 +43,7 @@ retry_download() {
     local curl_retval
     local http_status
     echo "Downloading: ${url}"
-    http_status=$(curl -C- --retry 20 --fail -w "%{http_code}" -O "${url}") || curl_retval=$?
+    http_status=$(curl -C- --retry "${MAX_RETRIES}" --fail -w "%{http_code}" -O "${url}") || curl_retval=$?
     if [ -n "${curl_retval}" ] && [ "${curl_retval}" -ne 22 ]; then
         finish_up "Curl failure while downloading."
     fi
@@ -54,7 +55,7 @@ retry_download() {
                 curl_retval=
                 sleep 5;
                 echo "Retrying download"
-                http_status=$(curl -C- --retry 20 --fail -w "%{http_code}" -O "$url" ) || curl_retval=$?
+                http_status=$(curl -C- --retry "${MAX_RETRIES}" --fail -w "%{http_code}" -O "$url" ) || curl_retval=$?
                 if [ -n "${curl_retval}" ] && [ "${curl_retval}" -ne 22 ]; then
                     finish_up "Curl failure while downloading."
                 fi

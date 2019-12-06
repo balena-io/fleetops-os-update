@@ -12,18 +12,33 @@ To perform an upgrade using this repo (with very specific parameters in terms of
 ## Useful helpers
 
 ### To generate a device list:
+```bash
 balena devices -a "${APP}" > device-list.mega.log
+```
 
 ### To create a batch file based on online status + tag:
-awk '/true*${STARTING_OS}/{print $NF}' device-list.mega.log | awk -F/ '{print $5}' > mega-batch.log #*
-for i in $(cat mega-batch); do balena tags --device $i | grep -q "${TAG}" && echo $i; done >> tags.log
+```bash
+awk '/true.*${STARTING_OS}/{print $NF}' device-list.mega.log | awk -F/ '{print $5}' | sort | shuf > mega-batch.log
+for i in $(cat mega-batch.log); do balena tags --device $i | grep -q "${TAG}" && echo $i; done >> tags.log 2>/dev/null
 sort -u tags.log | shuf -n "${BATCH_SIZE}" > batch
+```
 
 ### To filter out devices requiring a supervisor upgrade:
+```bash
 awk '/Fail: Super/{print $1}' preupdater.log > ../fleetops-supervisor-update/batch
+```
+
+### To create a batch for supervisor updates:
+```bash
+awk '/${STARTING_SUPER}/{print}' device-list.mega.log | grep -f batch | awk -F/ '{print $5}' > supervisor-upgrades
+```
 
 ### To connect to a device once it returns online:
+```bash
 uuid="${UUID}"; until balena ssh "${uuid}" 2>/dev/null; do sleep 60; done
+```
 
 ### To monitor the incremental progress of the update:
+```bash
 watch -n 120 ./monitor.sh ${APP} batch
+```
