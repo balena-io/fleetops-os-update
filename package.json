@@ -1,6 +1,6 @@
 {
   "name": "fleetops-os-update",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "To perform an upgrade using this repo (with very specific parameters in terms of source and target host OS versions):",
   "main": "run.sh",
   "scripts": {
