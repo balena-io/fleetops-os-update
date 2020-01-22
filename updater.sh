@@ -14,6 +14,7 @@ source /usr/sbin/resin-vars
 
 # Linking to a specific git commit sha to always be sure what version of the files are pulled
 URLBASE="https://raw.githubusercontent.com/balena-io-playground/fleetops-os-update/ca1996e3b99e07a66220a3291817a0e2aa260d45"
+LOCKFILE=/tmp/updater.lock
 TARGET_OS_VERSION="2.32.0+rev1"
 TARGET_SUPERVISOR_REPO="balena/armv7hf-supervisor"
 TARGET_SUPERVISOR_VERSION="v9.14.0"
@@ -23,12 +24,12 @@ DOWNLOADS=("xzdec.gz" "rdiff.xz" "hostosupdate.sh" "os/${TARGET_OS_VERSION_FILEN
 setup_logfile() {
     local workdir=$1
     LOGFILE="${workdir}/osupdate.$(date +"%Y%m%d_%H%M%S").log"
-    touch "$LOGFILE"
-    tail -f "$LOGFILE" &
+    touch "${LOGFILE}"
+    tail -f "${LOGFILE}" &
     # this is global
     tail_pid=$!
     # redirect all logs to the logfile
-    exec 1>> "$LOGFILE" 2>&1
+    exec 1>> "${LOGFILE}" 2>&1
 }
 
 stop_supervisor() {
@@ -89,12 +90,12 @@ update_supervisor_in_api() {
     DEVICEID="$(jq -r '.deviceId' "${CONFIGJSON}")"
     API_ENDPOINT="$(jq -r '.apiEndpoint' "${CONFIGJSON}")"
     SLUG="$(jq -r '.deviceType' "${CONFIGJSON}")"
-    while ! SUPERVISOR_ID=$(curl -s "${API_ENDPOINT}/v4/supervisor_release?\$select=id,image_name&\$filter=((device_type%20eq%20'$SLUG')%20and%20(supervisor_version%20eq%20'$TAG'))&apikey=${APIKEY}" | jq -e -r '.d[0].id'); do
+    while ! SUPERVISOR_ID=$(curl -s "${API_ENDPOINT}/v4/supervisor_release?\$select=id,image_name&\$filter=((device_type%20eq%20'${SLUG}')%20and%20(supervisor_version%20eq%20'$TAG'))&apikey=${APIKEY}" | jq -e -r '.d[0].id'); do
         echo "Retrying..."
         sleep 5
     done
-    echo "Extracted supervisor ID: $SUPERVISOR_ID; setting in the API"
-    while ! curl -s "${API_ENDPOINT}/v2/device($DEVICEID)?apikey=$APIKEY" -X PATCH -H 'Content-Type: application/json;charset=UTF-8' --data-binary "{\"supervisor_release\": \"$SUPERVISOR_ID\"}" ; do
+    echo "Extracted supervisor ID: ${SUPERVISOR_ID}; setting in the API"
+    while ! curl -s "${API_ENDPOINT}/v2/device(${DEVICEID})?apikey=${APIKEY}" -X PATCH -H 'Content-Type: application/json;charset=UTF-8' --data-binary "{\"supervisor_release\": \"${SUPERVISOR_ID}\"}" ; do
         echo "Retrying..."
         sleep 5
     done
@@ -111,17 +112,20 @@ finish_up() {
         nohup bash -c "sleep 5 ; reboot " > /dev/null 2>&1 &
     fi
     sleep 2
-    kill $tail_pid || true
+    if [[ -n ${tail_pid+x} ]]; then
+        kill ${tail_pid} || true
+    fi
+    flock -u 99
     exit ${exit_code}
 }
 
 main() {
-    echo pid $$
-
     if grep -q "${TARGET_OS_VERSION}" /etc/os-release ; then
        echo "OS update already done, nothing else to do."
        finish_up "OS update already done, nothing else to do."
     fi
+
+    date && echo pid $$
 
     workdir="/mnt/data/ops2"
     mkdir -p "${workdir}" && cd "${workdir}"
@@ -165,9 +169,9 @@ main() {
     cd workdir
     tar -xf "../${output_file}"
     # shellcheck disable=SC2038
-    calculated_sha=$(find . -type f -name layer.tar | xargs sha256sum | sort | grep -v 5f70 | awk '{print $2}'|xargs cat | sha256sum | awk '{ print $1}')
-    shipped_sha=$(grep "${SUPERVISOR_TAG}$" ../checksums.txt | awk '{ print $1}')
-    if [ "$shipped_sha" != "$calculated_sha" ]; then
+    calculated_sha=$(find . -type f -name layer.tar | xargs sha256sum | sort | grep -v 5f70 | awk '{print $2}' | xargs cat | sha256sum | awk '{print $1}')
+    shipped_sha=$(grep "${SUPERVISOR_TAG}$" ../checksums.txt | awk '{print $1}')
+    if [ "${shipped_sha}" != "${calculated_sha}" ]; then
         finish_up "Integrity check failure. Expected ${shipped_sha} : got ${calculated_sha}"
     else
         echo "Integrity check okay"
@@ -197,7 +201,7 @@ main() {
     ./hostosupdate.sh --hostos-version "${TARGET_OS_VERSION}" --no-reboot || finish_up "OS update failed"
     # Remove update image
     # shellcheck disable=SC2046
-    docker rmi $(docker images | grep resin/resinos | awk '{ print $3}') || true
+    docker rmi $(docker images | grep resin/resinos | awk '{print $3}') || true
 
     echo "Update supervisor"
     update_supervisor
@@ -215,6 +219,6 @@ main() {
   # Check if already running and bail if yes
   flock -n 99 || (echo "Already running script..."; exit 1)
   main
-) 99>/tmp/updater.lock
+) 99>"${LOCKFILE}"
 # Proper exit, required due to the locking subshell
 exit $?
